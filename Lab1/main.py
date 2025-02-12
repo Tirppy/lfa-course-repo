@@ -1,85 +1,75 @@
 import random
 
 class Grammar:
-    def __init__(self, non_terminals, terminals, productions, start_symbol):
-        self.non_terminals = non_terminals
-        self.terminals = terminals
-        self.productions = productions
-        self.start_symbol = start_symbol
-        
-    def generate_string(self):
-        return self._generate_from_symbol(self.start_symbol)
-    
-    def _generate_from_symbol(self, symbol):
-        if symbol in self.terminals:
-            return random.choice(symbol)
-        production = random.choice(self.productions[symbol])
-        result = ""
-        for part in production:
-            result += self._generate_from_symbol(part)
-        return result
-    
-    def to_finite_automaton(self):
-        states = ['q0', 'q1', 'q2']
-        alphabet = self.terminals
-        delta = {
-            'q0': {'a': 'q0', 'b': 'q0', 'c': 'q1', 'd': 'q2', 'e': 'q1'},
-            'q1': {'e': 'q1', 'f': 'q1', 'j': 'q2'},
-            'q2': {'e': 'q2', 'd': 'q2'}
+    def __init__(self):
+        self.VN = {"S", "L", "D"}  
+        self.VT = {"a", "b", "c", "d", "e", "f", "j"}  
+        self.P = {  
+            "S": ["aS", "bS", "cD", "dL", "e"],
+            "L": ["eL", "fL", "jD", "e"],
+            "D": ["eD", "d"]
         }
-        start_state = 'q0'
-        final_states = ['q1', 'q2']
-        
-        return FiniteAutomaton(states, alphabet, delta, start_state, final_states)
+        self.start_symbol = "S"
 
+    def generate_string(self):
+        current_string = self.start_symbol
+        while any(char in self.VN for char in current_string):  
+            for nt in current_string:
+                if nt in self.VN:
+                    replacement = random.choice(self.P[nt])  
+                    current_string = current_string.replace(nt, replacement, 1)
+                    break  
+        return current_string
+
+    def generate_strings(self, n=5):
+        return [self.generate_string() for _ in range(n)]
+
+    def to_finite_automaton(self):
+        states = set(self.VN) | {"q_accept"}  
+        alphabet = self.VT
+        transitions = {}
+
+        for non_terminal, rules in self.P.items():
+            for rule in rules:
+                if len(rule) == 1:  
+                    transitions[(non_terminal, rule)] = "q_accept"
+                else:
+                    terminal, next_state = rule[0], rule[1:]
+                    transitions[(non_terminal, terminal)] = next_state
+
+        return FiniteAutomaton(states, alphabet, transitions, "S", {"q_accept"})
 
 class FiniteAutomaton:
-    def __init__(self, states, alphabet, delta, start_state, final_states):
-        self.states = states            # List of states
-        self.alphabet = alphabet        # List of alphabet symbols
-        self.delta = delta              # Transition function (dict)
-        self.start_state = start_state  # Start state
-        self.final_states = final_states # Set of final (accepting) states
-        
-    def string_belong_to_language(self, input_string):
-        """Check if the input string belongs to the language of the automaton."""
-        current_state = self.start_state  # Start from the initial state
-        
-        for symbol in input_string:
-            if symbol not in self.alphabet:
-                return False  # Invalid symbol in input
-            if symbol in self.delta[current_state]:
-                current_state = self.delta[current_state][symbol]
-            else:
-                return False  # No valid transition for this symbol
-        return current_state in self.final_states  # Check if the end state is final
+    def __init__(self, states, alphabet, transitions, start_state, final_states):
+        self.states = states
+        self.alphabet = alphabet
+        self.transitions = transitions
+        self.start_state = start_state
+        self.final_states = final_states
 
+    def string_belongs(self, input_string):
+        current_state = self.start_state
+        for char in input_string:
+            if (current_state, char) in self.transitions:
+                current_state = self.transitions[(current_state, char)]
+            else:
+                return False
+        return current_state in self.final_states
 
 def main():
-    non_terminals = ['S', 'L', 'D']
-    terminals = ['a', 'b', 'c', 'd', 'e', 'f', 'j']
-    productions = {
-        'S': [['a', 'S'], ['b', 'S'], ['c', 'D'], ['d', 'L'], ['e']],
-        'L': [['e', 'L'], ['f', 'L'], ['j', 'D'], ['e']],
-        'D': [['e', 'D'], ['d']]
-    }
-    start_symbol = 'S'
+    
+    grammar = Grammar()
+    print("Generate Strings:")
+    for string in grammar.generate_strings():
+        print(f" - {string}")
 
-    grammar = Grammar(non_terminals, terminals, productions, start_symbol)
+    finite_automaton = grammar.to_finite_automaton()
 
-    print("Generated:")
-    for _ in range(5):
-        print(grammar.generate_string())
-
-    automaton = grammar.to_finite_automaton()
-
-    # Check if strings belong to the automaton's language
-    test_strings = ['ab', 'cdd', 'aa', 'ee', 'bfd']
-    print("\nChecking:")
-    for test_string in test_strings:
-        result = automaton.string_belong_to_language(test_string)
-        print(f"'{test_string}' -> {'Valid' if result else 'Invalid'}")
-
+    test_strings = ["abcde", "dde", "aae", "ce", "bdf"]
+    print("\nCheck Strings:")
+    for test in test_strings:
+        result = "Accepted" if finite_automaton.string_belongs(test) else "Rejected"
+        print(f" - '{test}' -> {result}")
 
 if __name__ == "__main__":
     main()
