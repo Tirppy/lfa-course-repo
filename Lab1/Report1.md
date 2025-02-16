@@ -69,12 +69,29 @@ def string_belongs(self, input_string):
     return current_state in self.final_states
 ```
 
-## Conclusion
+## Conclusions / Screenshots / Results
 
 The program successfully implements the conversion of a given regular grammar into a finite automaton.
 The Grammar class generates strings based on the production rules, and the FiniteAutomaton class checks whether a string belongs to the language.
 For example, the string "abcde" is rejected because there is no valid transition for the last symbol "e" from the accepting state.
 
+Example of output:
+```
+Generate Strings:
+ - e
+ - cd
+ - cd
+ - djd
+ - cd
+
+Check Strings:
+ - 'abcde' -> Rejected
+ - 'dde' -> Rejected
+ - 'aae' -> Accepted
+ - 'ce' -> Rejected
+```
+
 ## References
 
-_Formal Languages and Finite Automata, Guide for practical lessons_ by COJUHARI Irina, DUCA Ludmila, FIODOROV Ion.
+_Formal Languages and Finite Automata, Guide for practical lessons_ by COJUHARI Irina, DUCA Ludmila, FIODOROV Ion -
+https://else.fcim.utm.md/pluginfile.php/110458/mod_resource/content/0/LFPC_Guide.pdf
