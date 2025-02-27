@@ -1,0 +1,20 @@
+digraph {
+	q12 [label=q12 shape=ellipse]
+	q2 [label=q2 shape=ellipse]
+	q3 [label="final
+q3" shape=doublecircle]
+	q1 [label=q1 shape=ellipse]
+	q13 [label="final
+q13" shape=doublecircle]
+	q0 [label="start
+q0" fillcolor=lightblue shape=ellipse style=filled]
+	q0 -> q12 [label=a]
+	q12 -> q13 [label=b]
+	q12 -> q12 [label=a]
+	q13 -> q1 [label=b]
+	q13 -> q2 [label=a]
+	q2 -> q3 [label=b]
+	q2 -> q1 [label=a]
+	q1 -> q1 [label=b]
+	q1 -> q2 [label=a]
+}
