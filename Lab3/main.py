@@ -1,13 +1,14 @@
 import re
-from dataclasses import dataclass
-from typing import List
 
-@dataclass
 class Token:
-    type: str
-    value: str
-    line: int
-    column: int
+    def __init__(self, type_, value, line, column):
+        self.type = type_
+        self.value = value
+        self.line = line
+        self.column = column
+
+    def __repr__(self):
+        return f"Token({self.type}, {self.value!r}, {self.line}, {self.column})"
 
 KEYWORDS = {
     'open', 'fade', 'trim', 'save', 'show', 'as', 'delay', 'volume', 'mix',
@@ -16,51 +17,49 @@ KEYWORDS = {
     'overwrite', 'operlap'
 }
 
+TOKEN_SPECS = [
+    ('COMMENT',   r'\#.*'),             # Comment
+    ('PIPE',      r'\|\>'),             # Pipeline operator
+    ('STRING',    r'"[^"\n]*"'),        # String literal
+    ('TIME',      r'\d{2}:\d{2}'),      # Time format (e.g., 00:05, 01:00)
+    ('NUMBER',    r'\d+(\.\d+)?[sx]?'), # Number (with optional decimal and suffix)
+    ('IDENT',     r'[A-Za-z_][A-Za-z0-9_]*'),  # Identifier (or keyword)
+    ('NEWLINE',   r'\n'),               # Newline
+    ('SKIP',      r'[ \t]+'),           # Skip spaces/tabs
+    ('UNKNOWN',   r'.'),                # Any other character
+]
+TOKEN_REGEX = '|'.join(f'(?P<{name}>{pattern})' for name, pattern in TOKEN_SPECS)
+GET_TOKEN = re.compile(TOKEN_REGEX).match
+
 class Lexer:
-    def __init__(self, text: str):
+    def __init__(self, text):
         self.text = text
 
-    def tokenize(self) -> List[Token]:
+    def tokenize(self):
         tokens = []
-        token_specification = [
-            ('COMMENT',   r'\#.*'),                         # Comment from '#' to end of line
-            ('PIPE',      r'\|\>'),                         # Pipeline operator
-            ('STRING',    r'"[^"\n]*"'),                    # String literal (simplified, no escaped quotes)
-            ('TIME',      r'\d{2}:\d{2}'),                   # Time format e.g., 00:05, 01:00
-            ('NUMBER',    r'\d+(\.\d+)?([sx])?'),            # Number, with optional decimal and suffix (s, x)
-            ('IDENT',     r'[A-Za-z_][A-Za-z0-9_]*'),        # Identifier (or keyword)
-            ('NEWLINE',   r'\n'),                           # Newline
-            ('SKIP',      r'[ \t]+'),                       # Skip over spaces and tabs
-            ('MISMATCH',  r'.'),                            # Any other character (error)
-        ]
-        tok_regex = '|'.join(f'(?P<{tok_type}>{pattern})'
-                             for tok_type, pattern in token_specification)
-        get_token = re.compile(tok_regex).match
+        line, pos = 1, 0
+        mo = GET_TOKEN(self.text, pos)
 
-        line = 1
-        pos = 0
-        mo = get_token(self.text, pos)
-        while mo is not None:
+        while mo:
             kind = mo.lastgroup
             value = mo.group(kind)
             column = mo.start() - self.text.rfind('\n', 0, mo.start())
+
             if kind == 'NEWLINE':
                 line += 1
-                pos = mo.end()
-                mo = get_token(self.text, pos)
-                continue
             elif kind == 'SKIP':
-                pos = mo.end()
-                mo = get_token(self.text, pos)
-                continue
-            elif kind == 'IDENT':
-                if value in KEYWORDS:
-                    kind = value.upper()
-            elif kind == 'MISMATCH':
-                raise RuntimeError(f'Unexpected character {value!r} on line {line} column {column}')
-            tokens.append(Token(kind, value, line, column))
+                pass 
+            elif kind == 'IDENT' and value in KEYWORDS:
+                kind = value.upper() 
+            elif kind == 'UNKNOWN':
+                kind = "UNKNOWN" 
+
+            if kind not in {'NEWLINE', 'SKIP'}:
+                tokens.append(Token(kind, value, line, column))
+
             pos = mo.end()
-            mo = get_token(self.text, pos)
+            mo = GET_TOKEN(self.text, pos)
+
         return tokens
 
 if __name__ == '__main__':
