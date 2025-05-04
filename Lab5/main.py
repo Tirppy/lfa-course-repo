@@ -1,25 +1,11 @@
 class Grammar:
     def __init__(self, non_terminals, terminals, productions, start_symbol):
-        """
-        non_terminals: set of non-terminal symbols (VN)
-        terminals: set of terminal symbols (VT)
-        productions: dictionary mapping each non-terminal to a list of productions,
-                     where each production is represented as a list of symbols.
-        start_symbol: the starting symbol of the grammar.
-        """
         self.non_terminals = non_terminals
         self.terminals = terminals
         self.productions = productions
         self.start_symbol = start_symbol
 
     def eliminate_epsilon_productions(self):
-        """
-        Step 1: Eliminate ε-productions.
-        This method first determines all nullable non-terminals (ones that can derive ε).
-        Then for each production, it generates alternatives by optionally omitting nullable symbols.
-        For the start symbol, if an alternative is empty, it is replaced with ["ε"].
-        For non-start symbols, empty alternatives are omitted.
-        """
         nullable = set()
         changed = True
         while changed:
@@ -37,11 +23,9 @@ class Grammar:
             new_rules = set()
             for rule in rules:
                 if rule == ["ε"]:
-                    continue  # Skip the original ε-production.
+                    continue
                 alternatives = self._generate_alternatives(rule, nullable)
                 for alt in alternatives:
-                    # For non-start symbols, skip empty alternatives.
-                    # For the start symbol, replace an empty alternative with ["ε"].
                     if not alt:
                         if nt == self.start_symbol:
                             new_rules.add(("ε",))
@@ -52,13 +36,6 @@ class Grammar:
         return self
 
     def _generate_alternatives(self, rule, nullable):
-        """
-        Recursively generate all alternatives for a production rule by
-        optionally omitting nullable non-terminals.
-        :param rule: A list of symbols for a production.
-        :param nullable: A set of nullable non-terminals.
-        :return: A set of tuples, each tuple is one variant of the production.
-        """
         results = set()
         def helper(index, current):
             if index == len(rule):
@@ -66,20 +43,14 @@ class Grammar:
             else:
                 symbol = rule[index]
                 if symbol in nullable:
-                    # Option to omit the symbol.
+                    
                     helper(index + 1, current)
-                # Always include the symbol.
+                
                 helper(index + 1, current + [symbol])
         helper(0, [])
         return results
 
     def eliminate_unit_productions(self):
-        """
-        Step 2: Eliminate renaming (unit) productions.
-        For each non-terminal A, the method computes the set of non-terminals that
-        are reachable through unit productions and then adds all non-unit productions
-        from those non-terminals, explicitly skipping any ε-productions.
-        """
         unit_pairs = {nt: set() for nt in self.non_terminals}
         for nt in self.non_terminals:
             unit_pairs[nt].add(nt)
@@ -108,11 +79,6 @@ class Grammar:
         return self
 
     def eliminate_inaccessible_symbols(self):
-        """
-        Step 3: Eliminate inaccessible symbols.
-        Starting from the start symbol, this method finds all reachable non-terminals 
-        and terminals, then removes productions that are not reachable.
-        """
         reachable_nts = set()
         to_process = {self.start_symbol}
         while to_process:
@@ -135,12 +101,6 @@ class Grammar:
         return self
 
     def eliminate_non_productive_symbols(self):
-        """
-        Step 4: Eliminate non-productive symbols.
-        A symbol is productive if it can derive a string consisting solely of terminals.
-        This method computes the set of productive non-terminals and removes any
-        productions (and non-terminals) that include non-productive symbols.
-        """
         productive = set()
         changed = True
         while changed:
@@ -173,75 +133,57 @@ class Grammar:
         return self
 
     def convert_to_cnf(self):
-        """
-        Step 5: Convert the grammar into Chomsky Normal Form (CNF).
-        This involves two parts:
-          A. For productions with length >= 2, replace any terminal symbols by new non-terminals.
-          B. For productions with more than two symbols, break them into binary productions.
-        """
-        # Part A: Replace terminals in rules of length >= 2.
-        terminal_mapping = {}  # maps terminal -> new non-terminal representing it
-        new_prod = {}
-        for nt, rules in self.productions.items():
-            new_rules = []
-            for rule in rules:
-                if len(rule) >= 2:
-                    new_rule = []
-                    for symbol in rule:
-                        if symbol in self.terminals:
-                            if symbol not in terminal_mapping:
-                                new_nt = f"T_{symbol}"
-                                while new_nt in self.non_terminals:
-                                    new_nt += "_"
-                                terminal_mapping[symbol] = new_nt
-                                self.non_terminals.add(new_nt)
-                                new_prod.setdefault(new_nt, []).append([symbol])
-                            new_rule.append(terminal_mapping[symbol])
-                        else:
-                            new_rule.append(symbol)
-                    new_rules.append(new_rule)
-                else:
-                    new_rules.append(rule)
-            new_prod.setdefault(nt, []).extend(new_rules)
-        self.productions = new_prod
-
-        # Part B: Convert productions with more than 2 symbols into binary rules.
         cnf_productions = {}
         new_non_terminals = set(self.non_terminals)
+        generated = {}   
         count = 0
+
         for nt, rules in self.productions.items():
             for rule in rules:
                 if len(rule) <= 2:
                     cnf_productions.setdefault(nt, []).append(rule)
                 else:
-                    # For a rule A -> X1 X2 ... Xn (n > 2), introduce new non-terminals.
-                    current = rule[0]
-                    tail = rule[1:]
-                    count += 1
-                    new_nt = f"X{count}"
-                    new_non_terminals.add(new_nt)
-                    cnf_productions.setdefault(nt, []).append([current, new_nt])
-                    temp_rule = tail
-                    current_nt = new_nt
-                    while len(temp_rule) > 2:
+                    head, *tail = rule
+                    key = tuple(tail)
+                    if key in generated:
+                        Xprime = generated[key]
+                    else:
                         count += 1
-                        next_nt = f"X{count}"
-                        new_non_terminals.add(next_nt)
-                        cnf_productions.setdefault(current_nt, []).append([temp_rule[0], next_nt])
-                        current_nt = next_nt
-                        temp_rule = temp_rule[1:]
-                    cnf_productions.setdefault(current_nt, []).append(temp_rule)
+                        Xprime = f"X{count}"
+                        while Xprime in new_non_terminals:
+                            count += 1
+                            Xprime = f"X{count}"
+                        generated[key] = Xprime
+                        new_non_terminals.add(Xprime)
+
+                        curr_nt = Xprime
+                        temp = tail
+                        while len(temp) > 2:
+                            first, *rest = temp
+                            sub_key = tuple(rest)
+                            if sub_key in generated:
+                                next_nt = generated[sub_key]
+                            else:
+                                count += 1
+                                next_nt = f"X{count}"
+                                while next_nt in new_non_terminals:
+                                    count += 1
+                                    next_nt = f"X{count}"
+                                generated[sub_key] = next_nt
+                                new_non_terminals.add(next_nt)
+                            cnf_productions.setdefault(curr_nt, []).append([first, next_nt])
+                            curr_nt = next_nt
+                            temp = rest
+                        cnf_productions.setdefault(curr_nt, []).append(temp)
+
+                    cnf_productions.setdefault(nt, []).append([head, Xprime])
+
         self.productions = cnf_productions
         self.non_terminals = new_non_terminals
         return self
 
 
 def format_symbol(symbol):
-    """
-    Format a symbol for printing. If the symbol corresponds to a terminal
-    replacement (starts with 'T_'), return the terminal itself.
-    Otherwise, return the symbol unchanged.
-    """
     if symbol.startswith("T_"):
         return symbol[2:]
     return symbol
@@ -259,7 +201,12 @@ def main():
     }
     start_symbol = "S"
 
-    grammar = Grammar(non_terminals, terminals, productions, start_symbol)
+    new_start = "S0"
+    while new_start in non_terminals:
+        new_start += "0"
+    productions[new_start] = [[start_symbol]]
+    non_terminals.add(new_start)
+    grammar = Grammar(non_terminals, terminals, productions, new_start)
     
     grammar.eliminate_epsilon_productions() \
            .eliminate_unit_productions() \
