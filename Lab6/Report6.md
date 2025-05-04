@@ -61,6 +61,35 @@ Below is a list of the key functions and methods in our lexer + parser pipel
 
 ### Lexer
 
+```
+class Lexer:
+    def __init__(self, text):
+        self.text = text
+
+    def tokenize(self):
+        tokens = []
+        line, pos = 1, 0
+        mo = GET_TOKEN(self.text, pos)
+        while mo:
+            kind = mo.lastgroup
+            value = mo.group(kind)
+            column = mo.start() - self.text.rfind('\n', 0, mo.start())
+            if kind == 'NEWLINE':
+                line += 1
+            elif kind == 'SKIP':
+                pass
+            else:
+                if kind == 'IDENT' and value in KEYWORDS:
+                    kind = value.upper()
+                if kind == 'UNKNOWN':
+                    kind = 'UNKNOWN'
+                tokens.append(Token(kind, value, line, column))
+            pos = mo.end()
+            mo = GET_TOKEN(self.text, pos)
+        tokens.append(Token('EOF', '', line, column))
+        return tokens
+```
+
 - **`Lexer.__init__(self, text)`**  
   Initializes a new lexer instance with the input text to be tokenized.
 
@@ -69,6 +98,29 @@ Below is a list of the key functions and methods in our lexer + parser pipel
 
 ### TokenType and Keyword Setup
 
+```
+class TokenType(Enum):
+    COMMENT    = 'COMMENT'
+    PIPE       = 'PIPE'
+    STRING     = 'STRING'
+    TIME       = 'TIME'
+    NUMBER     = 'NUMBER'
+    IDENT      = 'IDENT'
+    UNKNOWN    = 'UNKNOWN'
+    EOF        = 'EOF'
+    OPEN       = 'OPEN'; FADE    = 'FADE'; TRIM    = 'TRIM'
+    SAVE       = 'SAVE'; SHOW    = 'SHOW'; AS      = 'AS'
+    DELAY      = 'DELAY'; VOLUME = 'VOLUME'; MIX    = 'MIX'
+    SPLIT      = 'SPLIT'; LOOP    = 'LOOP'; JOIN    = 'JOIN'
+    OVERLAY    = 'OVERLAY'; OVERLAYAUDIO='OVERLAYAUDIO'; EXPORT='EXPORT'
+    FORMAT     = 'FORMAT'; RESOLUTION='RESOLUTION'; BITRATE='BITRATE'
+    EXTRACT    = 'EXTRACT'; CUT     = 'CUT'; INSERT = 'INSERT'
+    ROTATE     = 'ROTATE'; BLANK   = 'BLANK'; OVERWRITE='OVERWRITE'
+    OPERLAP    = 'OPERLAP'
+
+KEYWORD_TYPES = { TokenType[k.upper()] for k in KEYWORDS }
+```
+
 - **`TokenType` enum**  
   Defines every possible token category (COMMENT, PIPE, STRING, TIME, NUMBER, IDENT, EOF, and each keyword) so that both lexer and parser share a single source of truth for token kinds.
 
@@ -76,6 +128,56 @@ Below is a list of the key functions and methods in our lexer + parser pipel
   A pre‑computed set of `TokenType` values corresponding to all DSL keywords, used by the parser to recognize command names.
 
 ### Parser
+
+```
+class Parser:
+    def __init__(self, tokens):
+        self.tokens = [
+            tok if isinstance(tok.type, TokenType)
+            else Token(TokenType[tok.type], tok.value, tok.line, tok.column)
+            for tok in tokens
+        ]
+        self.pos = 0
+        self.current_token = self.tokens[0]
+
+    def advance(self):
+        self.pos += 1
+        if self.pos < len(self.tokens):
+            self.current_token = self.tokens[self.pos]
+
+    def expect(self, ttype):
+        if self.current_token.type is ttype:
+            tok = self.current_token
+            self.advance()
+            return tok
+        raise SyntaxError(f"Expected {ttype}, got {self.current_token.type} at line {self.current_token.line}")
+
+    def parse(self):
+        pipelines = []
+        while self.current_token.type != TokenType.EOF:
+            pipelines.append(self.parse_pipeline())
+        return Program(pipelines)
+
+    def parse_pipeline(self):
+        cmds = [self.parse_command()]
+        while self.current_token.type == TokenType.PIPE:
+            self.advance()
+            cmds.append(self.parse_command())
+        return Pipeline(cmds)
+
+    def parse_command(self):
+        name_tok = self.current_token
+        if name_tok.type is TokenType.IDENT or name_tok.type in KEYWORD_TYPES:
+            self.advance()
+        else:
+            raise SyntaxError(f"Unexpected token {name_tok.type} at command start")
+        args = []
+        while self.current_token.type in {TokenType.STRING, TokenType.TIME, TokenType.NUMBER, TokenType.IDENT}:
+            tok = self.current_token
+            args.append(Arg(tok.type, tok.value))
+            self.advance()
+        return Command(name_tok.value, args)
+```
 
 - **`Parser.__init__(self, tokens)`**  
   Converts raw token objects (with string‑typed kinds) into tokens whose `.type` is a `TokenType`, initializes the token list, position index, and current lookahead token.
@@ -96,6 +198,61 @@ Below is a list of the key functions and methods in our lexer + parser pipel
   Implements the grammar rule for a command: checks that the next token is either an identifier or one of the keyword token types, consumes it as the command name, then repeatedly collects all following argument tokens (STRING, TIME, NUMBER, IDENT) into `Arg` nodes, returning a `Command` AST node.
 
 ### AST Node “pretty” Methods
+
+```
+@dataclass
+class Arg:
+    type: TokenType
+    value: str
+
+    def __repr__(self):
+        return f"Arg(type={self.type}, value={self.value!r})"
+
+@dataclass
+class Command:
+    name: str
+    args: List[Arg]
+
+    def __repr__(self):
+        return f"Command(name={self.name!r}, args={self.args})"
+
+    def pretty(self, indent: int = 4) -> str:
+        pad = ' ' * indent
+        lines = [f"{pad}Command(name={self.name!r}, args=["]
+        for a in self.args:
+            lines.append(f"{pad*2}{a!r},")
+        lines.append(f"{pad}])")
+        return "\n".join(lines)
+
+@dataclass
+class Pipeline:
+    commands: List[Command]
+
+    def __repr__(self):
+        return f"Pipeline(commands={self.commands})"
+
+    def pretty(self, indent: int = 2) -> str:
+        pad = ' ' * indent
+        lines = [f"{pad}Pipeline(commands=["]
+        for c in self.commands:
+            lines.append(c.pretty(indent + 2))
+        lines.append(f"{pad}])")
+        return "\n".join(lines)
+
+@dataclass
+class Program:
+    pipelines: List[Pipeline]
+
+    def __repr__(self):
+        return f"Program(pipelines={self.pipelines})"
+
+    def pretty(self) -> str:
+        lines = ["Program(pipelines=["]
+        for p in self.pipelines:
+            lines.append(p.pretty(2))
+        lines.append("])")
+        return "\n".join(lines)
+```
 
 - **`Program.pretty(self)`**  
   Produces a multi‑line, indented string representation of the entire AST, starting from the list of pipelines.
